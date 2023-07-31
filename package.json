@@ -1,0 +1,15 @@
+{
+  "name": "torus-provider",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@toruslabs/torus-embed": "^2.2.6",
+    "@web3-react/types": "^8.2.0"
+  }
+}
