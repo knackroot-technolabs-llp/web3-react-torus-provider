@@ -9,6 +9,27 @@ const torus_embed_1 = __importDefault(require("@toruslabs/torus-embed"));
 class TorusWallet extends types_1.Connector {
     constructor({ actions, options, onError }) {
         super(actions, onError);
+        this.connectListener = ({ chainId }) => {
+            this.actions.update({ chainId: this.parseChainId(chainId) });
+        };
+        this.disconnectListener = (error) => {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            this.provider?.request({ method: 'PUBLIC_disconnectSite' });
+            this.actions.resetState();
+            this.onError?.(error);
+        };
+        this.chainchangedListener = (chainId) => {
+            this.actions.update({ chainId: Number(chainId) });
+        };
+        this.accountchangedListener = (accounts) => {
+            if (accounts.length === 0) {
+                // handle this edge case by disconnecting
+                this.actions.resetState();
+            }
+            else {
+                this.actions.update({ accounts });
+            }
+        };
         this.options = options;
     }
     /**
@@ -23,7 +44,7 @@ class TorusWallet extends types_1.Connector {
         const accounts = await this.torus.login(this.options.logInOptions).then((accounts) => accounts);
         this.provider = this.torus.provider;
         this.actions.update({ accounts, chainId: Number(this.provider?.chainId) });
-        // return { provider: this.torus.provider, account }
+        this.isomorphicInitialize();
     }
     detectProvider() {
         if (this.provider) {
@@ -36,31 +57,48 @@ class TorusWallet extends types_1.Connector {
     isomorphicInitialize() {
         const provider = this.detectProvider();
         if (provider) {
-            provider.on('connect', ({ chainId }) => {
-                this.actions.update({ chainId: this.parseChainId(chainId) });
-            });
-            provider.on('disconnect', (error) => {
-                // eslint-disable-next-line @typescript-eslint/no-floating-promises
-                this.provider?.request({ method: 'PUBLIC_disconnectSite' });
-                this.actions.resetState();
-                this.onError?.(error);
-            });
-            provider.on('chainChanged', (chainId) => {
-                this.actions.update({ chainId: Number(chainId) });
-            });
-            provider.on('accountsChanged', (accounts) => {
-                if (accounts.length === 0) {
-                    // handle this edge case by disconnecting
-                    this.actions.resetState();
-                }
-                else {
-                    this.actions.update({ accounts });
-                }
-            });
+            provider.on('connect', this.connectListener);
+            provider.on('disconnect', this.disconnectListener);
+            provider.on('chainChanged', this.chainchangedListener);
+            provider.on('accountsChanged', this.accountchangedListener);
         }
     }
     parseChainId(chainId) {
         return Number.parseInt(chainId, 16);
+    }
+    async watchAsset({ address, symbol, decimals, image }) {
+        if (!this.provider)
+            throw new Error('No provider');
+        return this.provider
+            .request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC20',
+                options: {
+                    address,
+                    symbol,
+                    decimals,
+                    image, // A string url of the token logo
+                },
+            },
+        })
+            .then((success) => {
+            if (!success)
+                throw new Error('Rejected');
+            return true;
+        });
+    }
+    async connectEagerly() {
+        this.isomorphicInitialize();
+        await this.activate();
+    }
+    async deactivate() {
+        await this.torus?.cleanUp();
+        this.torus = undefined;
+        this.provider?.off("connect", this.connectListener);
+        this.provider?.off("disconnect", this.disconnectListener);
+        this.provider?.off("chainChanged", this.chainchangedListener);
+        this.provider?.off("accountsChanged", this.accountchangedListener);
     }
 }
 exports.TorusWallet = TorusWallet;
