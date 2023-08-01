@@ -2,7 +2,13 @@ import { Connector, Provider, Actions, ProviderConnectInfo, ProviderRpcError, Re
 import Torus, { TorusInpageProvider, TorusParams, TorusLoginParams, TorusCtorArgs, NetworkInterface } from '@toruslabs/torus-embed';
 import { chain } from 'lodash';
 
+type ChainParams = NetworkInterface & {
+  host: string,
+  chainId: number
+}
+
 interface TorusOptions {
+  chains: ChainParams[]
   initOptions: TorusParams,
   constructorOptions: TorusCtorArgs,
   logInOptions: TorusLoginParams
@@ -14,7 +20,6 @@ interface TorusWalletConstructorArgs {
   onError: () => void;
 }
 
-type ChainParams = NetworkInterface;
 
 type TorusWalletProvider = TorusInpageProvider & {
   providers?: Omit<TorusInpageProvider, 'providers'>[];
@@ -36,6 +41,12 @@ export class TorusWallet extends Connector {
   constructor({ actions, options, onError }: TorusWalletConstructorArgs) {
     super(actions, onError)
     this.options = options;
+    console.log("🚀 ~ file: index.ts:44 ~ TorusWallet ~ constructor ~ options:", options)
+
+    if (this.options.chains?.length === 0) {
+      throw new Error("chains is not provided")
+    }
+
   }
 
   /**
@@ -43,8 +54,12 @@ export class TorusWallet extends Connector {
    */
   public async activate() {
     // void 0
+    console.log("🚀 ~ file: index.ts:60 ~ TorusWallet ~ activate ~ !this.options.initOptions?.network:", !this.options.initOptions?.network)
     if (!this.torus) {
       this.torus = new Torus(this.options.constructorOptions)
+      if (!this.options.initOptions?.network) {
+        this.options.initOptions.network = this.options.chains[0]
+      }     
       await this.torus.init(this.options.initOptions)
     }
     const accounts = await this.torus.login(this.options.logInOptions).then((accounts: string[]): string[] => accounts)
@@ -52,6 +67,7 @@ export class TorusWallet extends Connector {
     this.actions.update({ accounts, chainId: Number(this.provider?.chainId) })
     this.isomorphicInitialize()
   }
+
   public async watchAsset({ address, symbol, decimals, image }: WatchAssetParameters): Promise<true> {
     if (!this.provider) throw new Error('No provider')
 
@@ -74,24 +90,25 @@ export class TorusWallet extends Connector {
       })
   }
 
-  public async switchOrAddChain(chainParameters: ChainParams) {
+  public async switchOrAddChain(chainId: number) {
     try {
+      const chain = this.options.chains?.find((x) => x.chainId === chainId);
+      if(!chain) throw new Error("chain is not supported")
       if (!this.connected && this.torus?.isInitialized && this.torus.isLoggedIn) throw new Error("Please login first");
-      await this.torus?.setProvider(chainParameters)
+      await this.torus?.setProvider(chain as NetworkInterface)
     } catch (error) {
-      throw error
+      console.error("switch network error:", error)
     }
   }
 
   public async connectEagerly(): Promise<void> {
-    console.log("connect Eagerly Called")
     this.torus = new Torus(this.options.constructorOptions)
     await this.torus.init(this.options.initOptions)
     this.provider = this.torus.provider as TorusWalletProvider
     if (this.provider.selectedAddress) {
       await this.activate()
     } else {
-      console.debug('Could not connect eagerly')
+      console.warn('Could not connect eagerly')
       this.actions.resetState()
     }
   }
@@ -126,7 +143,8 @@ export class TorusWallet extends Connector {
   }
 
   private chainchangedListener = (chainId: string): void => {
-
+    const chain = this.options.chains?.find((x) => x.chainId === Number(chainId));
+    if(!chain) throw new Error("chain is not supported")
     this.actions.update({ chainId: Number(chainId) })
   }
 

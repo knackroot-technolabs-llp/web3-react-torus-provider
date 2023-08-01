@@ -19,6 +19,9 @@ class TorusWallet extends types_1.Connector {
             this.onError?.(error);
         };
         this.chainchangedListener = (chainId) => {
+            const chain = this.options.chains?.find((x) => x.chainId === Number(chainId));
+            if (!chain)
+                throw new Error("chain is not supported");
             this.actions.update({ chainId: Number(chainId) });
         };
         this.accountchangedListener = (accounts) => {
@@ -31,32 +34,29 @@ class TorusWallet extends types_1.Connector {
             }
         };
         this.options = options;
+        console.log("🚀 ~ file: index.ts:44 ~ TorusWallet ~ constructor ~ options:", options);
+        if (this.options.chains?.length === 0) {
+            throw new Error("chains is not provided");
+        }
     }
     /**
      * No-op. May be called if it simplifies application code.
      */
-    async activate(desiredChainIdOrChainParameters) {
+    async activate() {
         // void 0
-        if (this.connected && desiredChainIdOrChainParameters && this.torus?.isInitialized) {
-            console.log("🚀 ~ file: index.ts:44 ~ TorusWallet ~ activate ~ desiredChainIdOrChainParameters:", desiredChainIdOrChainParameters);
-            await this.switchOrAddChain(desiredChainIdOrChainParameters);
-        }
-        //else {
+        console.log("🚀 ~ file: index.ts:60 ~ TorusWallet ~ activate ~ !this.options.initOptions?.network:", !this.options.initOptions?.network);
         if (!this.torus) {
             this.torus = new torus_embed_1.default(this.options.constructorOptions);
+            if (!this.options.initOptions?.network) {
+                this.options.initOptions.network = this.options.chains[0];
+            }
             await this.torus.init(this.options.initOptions);
         }
         const accounts = await this.torus.login(this.options.logInOptions).then((accounts) => accounts);
-        // const desiredChainId = typeof desiredChainIdOrChainParameters === "number" ? desiredChainIdOrChainParameters : desiredChainIdOrChainParameters?.chainId
-        // const desiredChainIdHex = desiredChainId?.toString(16)
-        // if(desiredChainIdHex !== this.provider?.chainId){
-        //   await this.switchOrAddChain(desiredChainIdOrChainParameters)
-        // }
         this.provider = this.torus.provider;
         this.actions.update({ accounts, chainId: Number(this.provider?.chainId) });
         this.isomorphicInitialize();
     }
-    // }
     async watchAsset({ address, symbol, decimals, image }) {
         if (!this.provider)
             throw new Error('No provider');
@@ -79,41 +79,20 @@ class TorusWallet extends types_1.Connector {
             return true;
         });
     }
-    async switchOrAddChain(desiredChainIdOrChainParameters) {
-        // const desiredChainId = typeof desiredChainIdOrChainParameters === "number" ? desiredChainIdOrChainParameters : desiredChainIdOrChainParameters?.chainId
-        // console.log("🚀 ~ file: index.ts:88 ~ TorusWallet ~ switchOrAddChain ~ desiredChainId:", desiredChainId)
-        // const desiredChainIdHex = desiredChainId?.toString(16)
-        // console.log("🚀 ~ file: index.ts:89 ~ TorusWallet ~ switchOrAddChain ~ desiredChainIdHex:", desiredChainIdHex)
-        // const chainId = `0x${desiredChainIdHex}`
-        // console.log("🚀 ~ file: index.ts:93 ~ TorusWallet ~ switchOrAddChain ~ chainId:", chainId)
-        // return this.provider?.request({
-        //   method: "wallet_switchEthereumChain",
-        //   params: { chainId: chainId },
-        // })
-        // .catch((error: ProviderRpcError) => {
-        //   const errorCode = (error.data as any)?.originalError?.code || error.code
-        //   if (errorCode === 4902 && typeof desiredChainIdOrChainParameters !== 'number') {
-        //     if (!this.provider) throw new Error('No provider')
-        //     return this.provider.request({
-        //       method: 'wallet_addEthereumChain',
-        //       params: [{ ...desiredChainIdOrChainParameters, chainId: desiredChainIdHex }],
-        //     }).catch(error => {
-        //       throw error
-        //     })
-        //   } else {
-        //     throw error
-        //   }
-        // }).then(async() => await this.activate(desiredChainId));
-        // return await this.provider?.send("wallet_switchEthereumChain", { chainId: chainId})
-        await this.torus?.setProvider({
-            host: "https://rpc-mumbai.maticvigil.com",
-            chainId: 80001,
-            networkName: "matic"
-        });
+    async switchOrAddChain(chainId) {
+        try {
+            const chain = this.options.chains?.find((x) => x.chainId === chainId);
+            if (!chain)
+                throw new Error("chain is not supported");
+            if (!this.connected && this.torus?.isInitialized && this.torus.isLoggedIn)
+                throw new Error("Please login first");
+            await this.torus?.setProvider(chain);
+        }
+        catch (error) {
+            console.error("switch network error:", error);
+        }
     }
     async connectEagerly() {
-        // this.torus = new Torus()
-        console.log("connect Eagerly Called");
         this.torus = new torus_embed_1.default(this.options.constructorOptions);
         await this.torus.init(this.options.initOptions);
         this.provider = this.torus.provider;
@@ -121,7 +100,7 @@ class TorusWallet extends types_1.Connector {
             await this.activate();
         }
         else {
-            console.debug('Could not connect eagerly');
+            console.warn('Could not connect eagerly');
             this.actions.resetState();
         }
     }
