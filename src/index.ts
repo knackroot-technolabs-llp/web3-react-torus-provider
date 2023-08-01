@@ -1,5 +1,6 @@
-import { Connector, Provider, Actions, ProviderConnectInfo, ProviderRpcError, RequestArguments, WatchAssetParameters } from '@web3-react/types'
-import Torus, { TorusInpageProvider, TorusParams, TorusLoginParams, TorusCtorArgs } from '@toruslabs/torus-embed';
+import { Connector, Provider, Actions, ProviderConnectInfo, ProviderRpcError, RequestArguments, WatchAssetParameters, AddEthereumChainParameter } from '@web3-react/types'
+import Torus, { TorusInpageProvider, TorusParams, TorusLoginParams, TorusCtorArgs, NetworkInterface } from '@toruslabs/torus-embed';
+import { chain } from 'lodash';
 
 interface TorusOptions {
   initOptions: TorusParams,
@@ -13,6 +14,8 @@ interface TorusWalletConstructorArgs {
   onError: () => void;
 }
 
+type ChainParams = NetworkInterface;
+
 type TorusWalletProvider = TorusInpageProvider & {
   providers?: Omit<TorusInpageProvider, 'providers'>[];
   request<T>(args: RequestArguments): Promise<T>;
@@ -21,6 +24,8 @@ type TorusWalletProvider = TorusInpageProvider & {
   selectedAddress: string;
   on: (event: string, args: any) => any;
 };
+
+
 
 export class TorusWallet extends Connector {
   /** {@inheritdoc Connector.provider} */
@@ -44,9 +49,60 @@ export class TorusWallet extends Connector {
     }
     const accounts = await this.torus.login(this.options.logInOptions).then((accounts: string[]): string[] => accounts)
     this.provider = this.torus.provider as TorusWalletProvider
-
     this.actions.update({ accounts, chainId: Number(this.provider?.chainId) })
     this.isomorphicInitialize()
+  }
+  public async watchAsset({ address, symbol, decimals, image }: WatchAssetParameters): Promise<true> {
+    if (!this.provider) throw new Error('No provider')
+
+    return this.provider
+      .request({
+        method: 'wallet_watchAsset',
+        params: {
+          type: 'ERC20', // Initially only supports ERC20, but eventually more!
+          options: {
+            address, // The address that the token is at.
+            symbol, // A ticker symbol or shorthand, up to 5 chars.
+            decimals, // The number of decimals in the token
+            image, // A string url of the token logo
+          },
+        },
+      })
+      .then((success) => {
+        if (!success) throw new Error('Rejected')
+        return true
+      })
+  }
+
+  public async switchOrAddChain(chainParameters: ChainParams) {
+    try {
+      if (!this.connected && this.torus?.isInitialized && this.torus.isLoggedIn) throw new Error("Please login first");
+      await this.torus?.setProvider(chainParameters)
+    } catch (error) {
+      throw error
+    }
+  }
+
+  public async connectEagerly(): Promise<void> {
+    console.log("connect Eagerly Called")
+    this.torus = new Torus(this.options.constructorOptions)
+    await this.torus.init(this.options.initOptions)
+    this.provider = this.torus.provider as TorusWalletProvider
+    if (this.provider.selectedAddress) {
+      await this.activate()
+    } else {
+      console.debug('Could not connect eagerly')
+      this.actions.resetState()
+    }
+  }
+
+  public async deactivate(): Promise<void> {
+    await this.torus?.cleanUp()
+    this.torus = undefined
+    this.provider?.off("connect", this.connectListener)
+    this.provider?.off("disconnect", this.disconnectListener)
+    this.provider?.off("chainChanged", this.chainchangedListener)
+    this.provider?.off("accountsChanged", this.accountchangedListener)
   }
 
   private detectProvider(): TorusWalletProvider | void {
@@ -101,43 +157,8 @@ export class TorusWallet extends Connector {
     return Number.parseInt(chainId, 16)
   }
 
-  public async watchAsset({ address, symbol, decimals, image }: WatchAssetParameters): Promise<true> {
-    if (!this.provider) throw new Error('No provider')
-
-    return this.provider
-      .request({
-        method: 'wallet_watchAsset',
-        params: {
-          type: 'ERC20', // Initially only supports ERC20, but eventually more!
-          options: {
-            address, // The address that the token is at.
-            symbol, // A ticker symbol or shorthand, up to 5 chars.
-            decimals, // The number of decimals in the token
-            image, // A string url of the token logo
-          },
-        },
-      })
-      .then((success) => {
-        if (!success) throw new Error('Rejected')
-        return true
-      })
-  }
-
-  public async connectEagerly(): Promise<void> {
-
-    this.isomorphicInitialize()
-
-    await this.activate()
-
-  }
-
-  public async deactivate(): Promise<void> {
-    await this.torus?.cleanUp()
-    this.torus = undefined
-    this.provider?.off("connect", this.connectListener)
-    this.provider?.off("disconnect", this.disconnectListener)
-    this.provider?.off("chainChanged", this.chainchangedListener)
-    this.provider?.off("accountsChanged", this.accountchangedListener)
+  private get connected() {
+    return !!this.provider?.isConnected?.()
   }
 
 }

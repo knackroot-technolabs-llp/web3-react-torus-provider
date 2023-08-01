@@ -35,37 +35,28 @@ class TorusWallet extends types_1.Connector {
     /**
      * No-op. May be called if it simplifies application code.
      */
-    async activate() {
+    async activate(desiredChainIdOrChainParameters) {
         // void 0
+        if (this.connected && desiredChainIdOrChainParameters && this.torus?.isInitialized) {
+            console.log("🚀 ~ file: index.ts:44 ~ TorusWallet ~ activate ~ desiredChainIdOrChainParameters:", desiredChainIdOrChainParameters);
+            await this.switchOrAddChain(desiredChainIdOrChainParameters);
+        }
+        //else {
         if (!this.torus) {
             this.torus = new torus_embed_1.default(this.options.constructorOptions);
             await this.torus.init(this.options.initOptions);
         }
         const accounts = await this.torus.login(this.options.logInOptions).then((accounts) => accounts);
+        // const desiredChainId = typeof desiredChainIdOrChainParameters === "number" ? desiredChainIdOrChainParameters : desiredChainIdOrChainParameters?.chainId
+        // const desiredChainIdHex = desiredChainId?.toString(16)
+        // if(desiredChainIdHex !== this.provider?.chainId){
+        //   await this.switchOrAddChain(desiredChainIdOrChainParameters)
+        // }
         this.provider = this.torus.provider;
         this.actions.update({ accounts, chainId: Number(this.provider?.chainId) });
         this.isomorphicInitialize();
     }
-    detectProvider() {
-        if (this.provider) {
-            return this.provider;
-        }
-        else {
-            return this.torus?.provider;
-        }
-    }
-    isomorphicInitialize() {
-        const provider = this.detectProvider();
-        if (provider) {
-            provider.on('connect', this.connectListener);
-            provider.on('disconnect', this.disconnectListener);
-            provider.on('chainChanged', this.chainchangedListener);
-            provider.on('accountsChanged', this.accountchangedListener);
-        }
-    }
-    parseChainId(chainId) {
-        return Number.parseInt(chainId, 16);
-    }
+    // }
     async watchAsset({ address, symbol, decimals, image }) {
         if (!this.provider)
             throw new Error('No provider');
@@ -88,9 +79,51 @@ class TorusWallet extends types_1.Connector {
             return true;
         });
     }
+    async switchOrAddChain(desiredChainIdOrChainParameters) {
+        // const desiredChainId = typeof desiredChainIdOrChainParameters === "number" ? desiredChainIdOrChainParameters : desiredChainIdOrChainParameters?.chainId
+        // console.log("🚀 ~ file: index.ts:88 ~ TorusWallet ~ switchOrAddChain ~ desiredChainId:", desiredChainId)
+        // const desiredChainIdHex = desiredChainId?.toString(16)
+        // console.log("🚀 ~ file: index.ts:89 ~ TorusWallet ~ switchOrAddChain ~ desiredChainIdHex:", desiredChainIdHex)
+        // const chainId = `0x${desiredChainIdHex}`
+        // console.log("🚀 ~ file: index.ts:93 ~ TorusWallet ~ switchOrAddChain ~ chainId:", chainId)
+        // return this.provider?.request({
+        //   method: "wallet_switchEthereumChain",
+        //   params: { chainId: chainId },
+        // })
+        // .catch((error: ProviderRpcError) => {
+        //   const errorCode = (error.data as any)?.originalError?.code || error.code
+        //   if (errorCode === 4902 && typeof desiredChainIdOrChainParameters !== 'number') {
+        //     if (!this.provider) throw new Error('No provider')
+        //     return this.provider.request({
+        //       method: 'wallet_addEthereumChain',
+        //       params: [{ ...desiredChainIdOrChainParameters, chainId: desiredChainIdHex }],
+        //     }).catch(error => {
+        //       throw error
+        //     })
+        //   } else {
+        //     throw error
+        //   }
+        // }).then(async() => await this.activate(desiredChainId));
+        // return await this.provider?.send("wallet_switchEthereumChain", { chainId: chainId})
+        await this.torus?.setProvider({
+            host: "https://rpc-mumbai.maticvigil.com",
+            chainId: 80001,
+            networkName: "matic"
+        });
+    }
     async connectEagerly() {
-        this.isomorphicInitialize();
-        await this.activate();
+        // this.torus = new Torus()
+        console.log("connect Eagerly Called");
+        this.torus = new torus_embed_1.default(this.options.constructorOptions);
+        await this.torus.init(this.options.initOptions);
+        this.provider = this.torus.provider;
+        if (this.provider.selectedAddress) {
+            await this.activate();
+        }
+        else {
+            console.debug('Could not connect eagerly');
+            this.actions.resetState();
+        }
     }
     async deactivate() {
         await this.torus?.cleanUp();
@@ -99,6 +132,29 @@ class TorusWallet extends types_1.Connector {
         this.provider?.off("disconnect", this.disconnectListener);
         this.provider?.off("chainChanged", this.chainchangedListener);
         this.provider?.off("accountsChanged", this.accountchangedListener);
+    }
+    detectProvider() {
+        if (this.provider) {
+            return this.provider;
+        }
+        else {
+            return this.torus?.provider;
+        }
+    }
+    isomorphicInitialize() {
+        const provider = this.detectProvider();
+        if (provider) {
+            provider.on('connect', this.connectListener);
+            provider.on('disconnect', this.disconnectListener);
+            provider.on('chainChanged', this.chainchangedListener);
+            provider.on('accountsChanged', this.accountchangedListener);
+        }
+    }
+    parseChainId(chainId) {
+        return Number.parseInt(chainId, 16);
+    }
+    get connected() {
+        return !!this.provider?.isConnected?.();
     }
 }
 exports.TorusWallet = TorusWallet;
