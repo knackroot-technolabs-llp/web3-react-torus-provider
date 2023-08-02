@@ -1,8 +1,8 @@
 {
-  "name": "torus-provider",
+  "name": "web3-react-torus-provider",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "web3-reac-torus-provider for web3-react/core library",
+  "main": "./src/dist/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

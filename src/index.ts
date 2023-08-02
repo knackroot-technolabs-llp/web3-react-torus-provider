@@ -1,6 +1,5 @@
 import { Connector, Provider, Actions, ProviderConnectInfo, ProviderRpcError, RequestArguments, WatchAssetParameters, AddEthereumChainParameter } from '@web3-react/types'
 import Torus, { TorusInpageProvider, TorusParams, TorusLoginParams, TorusCtorArgs, NetworkInterface } from '@toruslabs/torus-embed';
-import { chain } from 'lodash';
 
 type ChainParams = NetworkInterface & {
   host: string,
@@ -28,6 +27,8 @@ type TorusWalletProvider = TorusInpageProvider & {
   chainId: string;
   selectedAddress: string;
   on: (event: string, args: any) => any;
+  off: (event: string, args: any) => any;
+  removeListener(eventName: string | symbol, listener: (...args: any[]) => void): any;
 };
 
 
