@@ -41,10 +41,13 @@ export class TorusWallet extends Connector {
   constructor({ actions, options, onError }: TorusWalletConstructorArgs) {
     super(actions, onError)
     this.options = options;
-    console.log("🚀 ~ file: index.ts:44 ~ TorusWallet ~ constructor ~ options:", options)
 
     if (this.options.chains?.length === 0) {
       throw new Error("chains is not provided")
+    }
+
+    if (typeof this.options.initOptions.network === "undefined" || typeof this.options.initOptions.network !== 'object') {
+      this.options.initOptions.network = this.options.chains[0]
     }
 
   }
@@ -53,19 +56,19 @@ export class TorusWallet extends Connector {
    * No-op. May be called if it simplifies application code.
    */
   public async activate() {
-    // void 0
-    console.log("🚀 ~ file: index.ts:60 ~ TorusWallet ~ activate ~ !this.options.initOptions?.network:", !this.options.initOptions?.network)
-    if (!this.torus) {
-      this.torus = new Torus(this.options.constructorOptions)
-      if (!this.options.initOptions?.network) {
-        this.options.initOptions.network = this.options.chains[0]
-      }     
-      await this.torus.init(this.options.initOptions)
+    try {
+      // void 0
+      if (typeof this.torus === 'undefined' || !this.torus.isInitialized) {
+        this.torus = new Torus(this.options.constructorOptions)
+        await this.torus.init(this.options.initOptions)
+      }
+      const accounts = await this.torus.login(this.options.logInOptions).then((accounts: string[]): string[] => accounts)
+      this.provider = this.torus.provider as TorusWalletProvider
+      this.actions.update({ accounts, chainId: Number(this.provider?.chainId) })
+      this.isomorphicInitialize()
+    } catch (error) {
+      console.error("error occured during activating wallet:", error)
     }
-    const accounts = await this.torus.login(this.options.logInOptions).then((accounts: string[]): string[] => accounts)
-    this.provider = this.torus.provider as TorusWalletProvider
-    this.actions.update({ accounts, chainId: Number(this.provider?.chainId) })
-    this.isomorphicInitialize()
   }
 
   public async watchAsset({ address, symbol, decimals, image }: WatchAssetParameters): Promise<true> {
@@ -93,7 +96,7 @@ export class TorusWallet extends Connector {
   public async switchOrAddChain(chainId: number) {
     try {
       const chain = this.options.chains?.find((x) => x.chainId === chainId);
-      if(!chain) throw new Error("chain is not supported")
+      if (!chain) throw new Error("chain is not supported")
       if (!this.connected && this.torus?.isInitialized && this.torus.isLoggedIn) throw new Error("Please login first");
       await this.torus?.setProvider(chain as NetworkInterface)
     } catch (error) {
@@ -102,24 +105,34 @@ export class TorusWallet extends Connector {
   }
 
   public async connectEagerly(): Promise<void> {
-    this.torus = new Torus(this.options.constructorOptions)
-    await this.torus.init(this.options.initOptions)
-    this.provider = this.torus.provider as TorusWalletProvider
-    if (this.provider.selectedAddress) {
-      await this.activate()
-    } else {
-      console.warn('Could not connect eagerly')
-      this.actions.resetState()
+    try {
+      this.torus = new Torus(this.options.constructorOptions)
+      await this.torus.init(this.options.initOptions)
+      this.provider = this.torus.provider as TorusWalletProvider
+      if (this.provider.selectedAddress) {
+        await this.activate()
+      } else {
+        console.warn('Could not connect eagerly')
+        this.torus.clearInit()
+        this.actions.resetState()
+      }
+    } catch (error) {
+      console.error(error)
     }
   }
 
   public async deactivate(): Promise<void> {
-    await this.torus?.cleanUp()
-    this.torus = undefined
-    this.provider?.off("connect", this.connectListener)
-    this.provider?.off("disconnect", this.disconnectListener)
-    this.provider?.off("chainChanged", this.chainchangedListener)
-    this.provider?.off("accountsChanged", this.accountchangedListener)
+    try {
+      this.provider?.off("connect", this.connectListener)
+      this.provider?.off("disconnect", this.disconnectListener)
+      this.provider?.off("chainChanged", this.chainchangedListener)
+      this.provider?.off("accountsChanged", this.accountchangedListener)
+      await this.torus?.cleanUp()
+      this.torus = undefined
+      this.actions.resetState()
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   private detectProvider(): TorusWalletProvider | void {
@@ -136,15 +149,13 @@ export class TorusWallet extends Connector {
 
   private disconnectListener = (error: ProviderRpcError): void => {
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    this.provider?.request({ method: 'PUBLIC_disconnectSite' })
-
-    this.actions.resetState()
     this.onError?.(error)
+    this.deactivate()
   }
 
   private chainchangedListener = (chainId: string): void => {
     const chain = this.options.chains?.find((x) => x.chainId === Number(chainId));
-    if(!chain) throw new Error("chain is not supported")
+    if (!chain) throw new Error("chain is not supported")
     this.actions.update({ chainId: Number(chainId) })
   }
 
@@ -178,5 +189,4 @@ export class TorusWallet extends Connector {
   private get connected() {
     return !!this.provider?.isConnected?.()
   }
-
 }

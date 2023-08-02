@@ -14,9 +14,8 @@ class TorusWallet extends types_1.Connector {
         };
         this.disconnectListener = (error) => {
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            this.provider?.request({ method: 'PUBLIC_disconnectSite' });
-            this.actions.resetState();
             this.onError?.(error);
+            this.deactivate();
         };
         this.chainchangedListener = (chainId) => {
             const chain = this.options.chains?.find((x) => x.chainId === Number(chainId));
@@ -34,28 +33,31 @@ class TorusWallet extends types_1.Connector {
             }
         };
         this.options = options;
-        console.log("🚀 ~ file: index.ts:44 ~ TorusWallet ~ constructor ~ options:", options);
         if (this.options.chains?.length === 0) {
             throw new Error("chains is not provided");
+        }
+        if (typeof this.options.initOptions.network === "undefined" || typeof this.options.initOptions.network !== 'object') {
+            this.options.initOptions.network = this.options.chains[0];
         }
     }
     /**
      * No-op. May be called if it simplifies application code.
      */
     async activate() {
-        // void 0
-        console.log("🚀 ~ file: index.ts:60 ~ TorusWallet ~ activate ~ !this.options.initOptions?.network:", !this.options.initOptions?.network);
-        if (!this.torus) {
-            this.torus = new torus_embed_1.default(this.options.constructorOptions);
-            if (!this.options.initOptions?.network) {
-                this.options.initOptions.network = this.options.chains[0];
+        try {
+            // void 0
+            if (typeof this.torus === 'undefined' || !this.torus.isInitialized) {
+                this.torus = new torus_embed_1.default(this.options.constructorOptions);
+                await this.torus.init(this.options.initOptions);
             }
-            await this.torus.init(this.options.initOptions);
+            const accounts = await this.torus.login(this.options.logInOptions).then((accounts) => accounts);
+            this.provider = this.torus.provider;
+            this.actions.update({ accounts, chainId: Number(this.provider?.chainId) });
+            this.isomorphicInitialize();
         }
-        const accounts = await this.torus.login(this.options.logInOptions).then((accounts) => accounts);
-        this.provider = this.torus.provider;
-        this.actions.update({ accounts, chainId: Number(this.provider?.chainId) });
-        this.isomorphicInitialize();
+        catch (error) {
+            console.error("error occured during activating wallet:", error);
+        }
     }
     async watchAsset({ address, symbol, decimals, image }) {
         if (!this.provider)
@@ -93,24 +95,36 @@ class TorusWallet extends types_1.Connector {
         }
     }
     async connectEagerly() {
-        this.torus = new torus_embed_1.default(this.options.constructorOptions);
-        await this.torus.init(this.options.initOptions);
-        this.provider = this.torus.provider;
-        if (this.provider.selectedAddress) {
-            await this.activate();
+        try {
+            this.torus = new torus_embed_1.default(this.options.constructorOptions);
+            await this.torus.init(this.options.initOptions);
+            this.provider = this.torus.provider;
+            if (this.provider.selectedAddress) {
+                await this.activate();
+            }
+            else {
+                console.warn('Could not connect eagerly');
+                this.torus.clearInit();
+                this.actions.resetState();
+            }
         }
-        else {
-            console.warn('Could not connect eagerly');
-            this.actions.resetState();
+        catch (error) {
+            console.error(error);
         }
     }
     async deactivate() {
-        await this.torus?.cleanUp();
-        this.torus = undefined;
-        this.provider?.off("connect", this.connectListener);
-        this.provider?.off("disconnect", this.disconnectListener);
-        this.provider?.off("chainChanged", this.chainchangedListener);
-        this.provider?.off("accountsChanged", this.accountchangedListener);
+        try {
+            this.provider?.off("connect", this.connectListener);
+            this.provider?.off("disconnect", this.disconnectListener);
+            this.provider?.off("chainChanged", this.chainchangedListener);
+            this.provider?.off("accountsChanged", this.accountchangedListener);
+            await this.torus?.cleanUp();
+            this.torus = undefined;
+            this.actions.resetState();
+        }
+        catch (error) {
+            console.error(error);
+        }
     }
     detectProvider() {
         if (this.provider) {
