@@ -1,13 +1,19 @@
 {
   "name": "web3-react-torus-provider",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "web3-reac-torus-provider for web3-react/core library",
   "main": "./src/dist/index.js",
+  "exports": "./src/dist/index.js",
+  "author": "Sandip Prajapati",
+  "license": "ISC",
+  "homepage": "https://github.com/knackroot-technolabs-llp/web3-react-torus-provider#readme",
+  "repository": "github:knackroot-technolabs-llp/web3-react-torus-provider",
+  "publishConfig": {
+    "registry": "https://github.com/knackroot-technolabs-llp/web3-react-torus-provider"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "@toruslabs/torus-embed": "^2.2.6",
     "@web3-react/types": "^8.2.0"
