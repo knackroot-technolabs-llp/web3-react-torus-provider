@@ -3,7 +3,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TorusWallet = void 0;
 const types_1 = require("@web3-react/types");
 const torus_embed_1 = __importDefault(require("@toruslabs/torus-embed"));
 class TorusWallet extends types_1.Connector {
@@ -71,7 +70,7 @@ class TorusWallet extends types_1.Connector {
                     address,
                     symbol,
                     decimals,
-                    image, // A string url of the token logo
+                    image,
                 },
             },
         })
