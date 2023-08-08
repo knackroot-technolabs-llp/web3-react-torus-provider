@@ -1,6 +1,6 @@
 {
   "name": "web3-react-torus-provider",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "web3-reac-torus-provider for web3-react/core library",
   "main": "./src/dist/index.js",
   "exports": "./src/dist/index.js",

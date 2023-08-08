@@ -110,12 +110,12 @@ export class TorusWallet extends Connector {
       this.torus = new Torus(this.options.constructorOptions)
       await this.torus.init(this.options.initOptions)
       this.provider = this.torus.provider as TorusWalletProvider
-      if (this.provider.selectedAddress) {
+      if (typeof this.provider?.selectedAddress !== 'undefined') {
         await this.activate()
       } else {
         console.warn('Could not connect eagerly')
-        this.torus.clearInit()
         this.actions.resetState()
+        await this.torus.logout()
       }
     } catch (error) {
       console.error(error)
